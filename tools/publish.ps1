@@ -1,6 +1,10 @@
-﻿# publish.ps1 - one-click publish: syntax check, commit, push. GitHub Pages rebuilds in about a minute.
+# publish.ps1 - one-click publish: syntax check, commit, push. GitHub Pages rebuilds in about a minute.
 # Usage: double-click publish.cmd in the project folder, or:
 #   powershell -ExecutionPolicy Bypass -File tools\publish.ps1 -Message "add news item"
+#
+# Two transports:
+#   1. git push over https://github.com  (normal)
+#   2. REST API via api.github.com        (automatic fallback when github.com:443 is unreachable)
 
 param(
     [string]$Message = "Update site content",
@@ -11,15 +15,14 @@ $ErrorActionPreference = 'Continue'
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
-$site = "https://luobinjie687.github.io/"
-$errLog = Join-Path $env:TEMP "homepage-git-stderr.log"
+$site    = "https://luobinjie687.github.io/"
+$errLog  = Join-Path $env:TEMP "homepage-git-stderr.log"
+$marker  = Join-Path $root ".git\api-publish-pending"
 
-function Wait-Exit {
-    if (-not $NoPause) { Read-Host "Press Enter to close" }
-}
+function Wait-Exit { if (-not $NoPause) { Read-Host "Press Enter to close" } }
 
-# git writes its progress lines to stderr, which PowerShell would render as red errors.
-# Run it with stderr captured to a file, then print those lines in grey.
+# git writes progress to stderr, which PowerShell renders as scary red errors.
+# Capture it to a file and reprint in grey instead.
 function Invoke-Git {
     param([string[]]$GitArgs)
     if (Test-Path $errLog) { Remove-Item $errLog -Force -ErrorAction SilentlyContinue }
@@ -33,6 +36,14 @@ function Invoke-Git {
     return $code
 }
 
+function Test-GithubHttps {
+    param([int]$TimeoutMs = 6000)
+    $c = New-Object Net.Sockets.TcpClient
+    try { return $c.ConnectAsync('github.com', 443).Wait($TimeoutMs) }
+    catch { return $false }
+    finally { $c.Close() }
+}
+
 # --- locate git (not on PATH on this machine by default) ---
 $git = (Get-Command git -ErrorAction SilentlyContinue).Source
 if (-not $git) { $git = "$env:ProgramFiles\Git\cmd\git.exe" }
@@ -42,8 +53,25 @@ if (-not (Test-Path $git)) {
     exit 1
 }
 
+# --- step 0: if a previous publish went through the API, realign local history ---
+if (Test-Path $marker) {
+    Write-Host "[0/4] previous publish used the API - realigning local git ..."
+    if (Test-GithubHttps) {
+        $code = Invoke-Git @('fetch', 'origin', 'main')
+        if ($code -eq 0) {
+            Invoke-Git @('reset', '--hard', 'origin/main') | Out-Null
+            Remove-Item $marker -Force -ErrorAction SilentlyContinue
+            Write-Host "    local history matches GitHub again" -ForegroundColor Green
+        } else {
+            Write-Host "    fetch failed, will publish through the API again" -ForegroundColor Yellow
+        }
+    } else {
+        Write-Host "    github.com unreachable, will publish through the API again" -ForegroundColor Yellow
+    }
+}
+
 # --- step 1: syntax check ---
-Write-Host "[1/3] checking JavaScript syntax ..."
+Write-Host "[1/4] checking JavaScript syntax ..."
 & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "check-site.ps1") | Out-Host
 if ($LASTEXITCODE -ne 0) {
     Write-Host ""
@@ -53,7 +81,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 # --- step 2: commit ---
-Write-Host "[2/3] committing ..."
+Write-Host "[2/4] committing ..."
 Invoke-Git @('add', '-A') | Out-Null
 $pending = (& $git status --porcelain 2>$null) | Out-String
 if ([string]::IsNullOrWhiteSpace($pending)) {
@@ -68,14 +96,25 @@ if ($code -ne 0) {
     exit 1
 }
 
-# --- step 3: push with retries (github.com is flaky on some networks) ---
-Write-Host "[3/3] pushing to GitHub ..."
+# --- step 3: transport 1 - plain git push, if github.com is reachable ---
 $ok = $false
-for ($i = 1; $i -le 8; $i++) {
-    Write-Host "  attempt $i ..."
-    $code = Invoke-Git @('push', 'origin', 'main')
-    if ($code -eq 0) { $ok = $true; break }
-    Start-Sleep -Seconds 4
+if (Test-GithubHttps) {
+    Write-Host "[3/4] pushing to GitHub ..."
+    for ($i = 1; $i -le 3; $i++) {
+        Write-Host "  attempt $i ..."
+        $code = Invoke-Git @('push', 'origin', 'main')
+        if ($code -eq 0) { $ok = $true; break }
+        Start-Sleep -Seconds 3
+    }
+} else {
+    Write-Host "[3/4] github.com:443 is unreachable from this network - switching to the API transport" -ForegroundColor Yellow
+}
+
+# --- step 4: transport 2 - REST API through api.github.com ---
+if (-not $ok) {
+    Write-Host "[4/4] publishing through the GitHub API ..."
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "publish-api.ps1") -Message $Message -NoPause | Out-Host
+    $ok = ($LASTEXITCODE -eq 0)
 }
 
 Write-Host ""
@@ -84,8 +123,7 @@ if ($ok) {
     Write-Host "  $site" -ForegroundColor Green
     Write-Host "Still seeing the old version? Wait 60s, then press Ctrl+F5 in the browser."
 } else {
-    Write-Host "Push failed 8 times - the network could not reach github.com." -ForegroundColor Red
+    Write-Host "Publish failed on both transports." -ForegroundColor Red
     Write-Host "Your edit is saved locally and the commit is safe. Run publish.cmd again later."
 }
 Wait-Exit
-
