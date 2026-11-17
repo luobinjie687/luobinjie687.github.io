@@ -200,6 +200,63 @@
     });
   }
 
+  /* ---------- 读书与文献笔记 ---------- */
+  function renderReading() {
+    var r = S.reading || {};
+    var intro = $("reading-intro");
+    if (intro) {
+      if (r.intro) intro.textContent = r.intro;
+      else intro.hidden = true;
+    }
+
+    var box = $("reading-list");
+    if (!box) return;
+    box.innerHTML = "";
+
+    var notes = Array.isArray(r.notes) ? r.notes.slice() : [];
+    // 新的排前面（"2026-11" 这种写法可以直接按字符串比大小）
+    notes.sort(function (a, b) {
+      return String(b.date || "").localeCompare(String(a.date || ""));
+    });
+
+    if (!notes.length) {
+      box.appendChild(el("div", "reading-empty", "这个栏目刚开张，第一篇笔记正在路上。"));
+      return;
+    }
+
+    notes.forEach(function (n) {
+      var card = el("div", "note");
+
+      // 左侧：类型标签 + 年月
+      var side = el("div", "note-side");
+      if (n.kind) side.appendChild(el("span", "note-kind", esc(n.kind)));
+      if (n.date) side.appendChild(el("div", "note-date", esc(n.date)));
+      card.appendChild(side);
+
+      // 右侧：标题、出处、摘要、标签与链接
+      var body = el("div", "note-body");
+      body.appendChild(el("h3", "note-title", esc(n.title || "")));
+      if (n.source) body.appendChild(el("div", "note-source", esc(n.source)));
+      if (n.summary) body.appendChild(el("p", "note-summary", esc(n.summary)));
+
+      var foot = el("div", "note-foot");
+      (Array.isArray(n.tags) ? n.tags : []).forEach(function (t) {
+        foot.appendChild(el("span", "chip chip-sm", esc(t)));
+      });
+      if (n.link) {
+        var a = el("a", "note-link", "原文 ↗");
+        a.href = n.link;
+        a.target = "_blank";
+        a.rel = "noopener";
+        foot.appendChild(a);
+      }
+      if (foot.childNodes.length) body.appendChild(foot);
+
+      card.appendChild(body);
+      box.appendChild(card);
+    });
+  }
+
   /* ---------- 近况 ---------- */
   function renderNews() {
     var box = $("news-list");
@@ -270,6 +327,7 @@
     { id: "education", label: "教育背景", data: "education" },
     { id: "skills", label: "技能", data: "skills" },
     { id: "plan", label: "路线", data: "plan" },
+    { id: "reading", label: "笔记", data: null }, // 笔记栏恒显示（空了会显示占位）
     { id: "publications", label: "论文", data: "publications" },
     { id: "projects", label: "项目", data: "projects" },
     { id: "news", label: "近况", data: "news" },
@@ -370,6 +428,7 @@
   renderEducation();
   renderSkills();
   renderEntries("plan", "plan-list");
+  renderReading();
   renderPubs();
   renderEntries("projects", "proj-list");
   renderNews();
