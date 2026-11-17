@@ -59,7 +59,7 @@
       var img = el("img", "avatar");
       img.src = S.avatar;
       img.alt = name;
-      img.loading = "lazy";
+      img.loading = "eager"; // 首屏头像不做懒加载，避免出现瞬间空位
       box.replaceWith(img);
     } else {
       box.textContent = name.trim().charAt(0);

@@ -71,12 +71,43 @@ if (-not (Test-Path $git)) {
 if (Test-Path $marker) {
     Write-Host "[0/4] previous publish used the API - realigning local git ..."
     if (Test-GithubHttps) {
+        # IMPORTANT: reset --hard throws away uncommitted edits, so never run it on a dirty tree.
+        # Stash the working tree first, realign, then put the edits back on top.
+        $dirty = ((& $git status --porcelain 2>$null) | Out-String).Trim()
+        $stashed = $false
+        if ($dirty) {
+            Write-Host "    your edits are not committed yet - saving them first ..."
+            $code = Invoke-Git @('stash', 'push', '-u', '-m', 'publish-autosave')
+            if ($code -ne 0) {
+                Write-Host "    could not save your edits, stopping before anything is touched." -ForegroundColor Red
+                Wait-Exit
+                exit 1
+            }
+            $stashed = $true
+        }
+
         $code = Invoke-Git @('fetch', 'origin', 'main')
         if ($code -eq 0) {
             Invoke-Git @('reset', '--hard', 'origin/main') | Out-Null
             Remove-Item $marker -Force -ErrorAction SilentlyContinue
             Write-Host "    local history matches GitHub again" -ForegroundColor Green
+
+            if ($stashed) {
+                Write-Host "    putting your edits back ..."
+                $code = Invoke-Git @('stash', 'pop')
+                if ($code -ne 0) {
+                    Write-Host ""
+                    Write-Host "Stopped: git could not re-apply your edits automatically (conflict)." -ForegroundColor Red
+                    Write-Host "Your edits are NOT lost - they are kept in git stash. To recover:" -ForegroundColor Yellow
+                    Write-Host "  git stash list" -ForegroundColor Yellow
+                    Write-Host "  git stash pop" -ForegroundColor Yellow
+                    Wait-Exit
+                    exit 1
+                }
+                Write-Host "    edits restored" -ForegroundColor Green
+            }
         } else {
+            if ($stashed) { Invoke-Git @('stash', 'pop') | Out-Null }
             Write-Host "    fetch failed, will publish through the API again" -ForegroundColor Yellow
         }
     } else {
