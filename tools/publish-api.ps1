@@ -11,7 +11,8 @@ param(
     [string]$Message = "Update site content",
     [string]$Repo = "luobinjie687/luobinjie687.github.io",
     [string]$Branch = "main",
-    [switch]$NoPause
+    [switch]$NoPause,
+    [switch]$DryRun
 )
 
 $ErrorActionPreference = 'Continue'
@@ -98,6 +99,11 @@ try {
     Write-Host "    commit: $($commit.sha)"
 
     # --- 4. fast-forward the branch ---
+    if ($DryRun) {
+        Write-Host "[api 5/5] DRY RUN - skipping the branch update"
+        Write-Host "Dry run OK: blobs, tree and commit all accepted." -ForegroundColor Green
+        exit 0
+    }
     Write-Host "[api 5/5] updating $Branch ..."
     $refBody = @{ sha = $commit.sha; force = $false } | ConvertTo-Json -Compress
     $rf = Join-Path $tmpDir "ref.json"
