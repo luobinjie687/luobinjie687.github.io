@@ -21,19 +21,33 @@ $marker  = Join-Path $root ".git\api-publish-pending"
 
 function Wait-Exit { if (-not $NoPause) { Read-Host "Press Enter to close" } }
 
-# git writes progress to stderr, which PowerShell renders as scary red errors.
-# Capture it to a file and reprint in grey instead.
+# git writes progress to stderr, which PowerShell would render as scary red errors.
+# Run git through a .NET process object instead, so stderr is plain text we can print in grey.
 function Invoke-Git {
     param([string[]]$GitArgs)
-    if (Test-Path $errLog) { Remove-Item $errLog -Force -ErrorAction SilentlyContinue }
-    & $git @GitArgs 2> $errLog | Out-Host
-    $code = $LASTEXITCODE
-    if (Test-Path $errLog) {
-        Get-Content $errLog -ErrorAction SilentlyContinue | Where-Object { $_.Trim() } | ForEach-Object {
-            Write-Host "    $_" -ForegroundColor DarkGray
+
+    $psi = New-Object Diagnostics.ProcessStartInfo
+    $psi.FileName = $git
+    $psi.Arguments = ($GitArgs | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } }) -join ' '
+    $psi.WorkingDirectory = $root
+    $psi.UseShellExecute = $false
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    $psi.StandardOutputEncoding = [Text.UTF8Encoding]::new($false)
+    $psi.StandardErrorEncoding = [Text.UTF8Encoding]::new($false)
+
+    $p = [Diagnostics.Process]::Start($psi)
+    $out = $p.StandardOutput.ReadToEnd()
+    $err = $p.StandardError.ReadToEnd()
+    $p.WaitForExit()
+
+    if ($out.Trim()) { Write-Host $out.TrimEnd() }
+    if ($err.Trim()) {
+        foreach ($line in ($err -split "`r?`n")) {
+            if ($line.Trim()) { Write-Host "    $line" -ForegroundColor DarkGray }
         }
     }
-    return $code
+    return $p.ExitCode
 }
 
 function Test-GithubHttps {

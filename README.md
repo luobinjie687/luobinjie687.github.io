@@ -18,7 +18,8 @@ my-homepage/
 │  └─ avatar.jpg       （可选）头像，放进来后在 site.js 里写 "assets/avatar.jpg"
 ├─ tools/
 │  ├─ check-site.ps1   语法自检（改完 site.js 可以先跑它）
-│  └─ publish.ps1      publish.cmd 实际调用的脚本
+│  ├─ publish.ps1      publish.cmd 实际调用的脚本
+│  └─ publish-api.ps1  github.com 不通时改走 API 的备用通道
 └─ .nojekyll           给 GitHub Pages 用的空文件，别删
 ```
 
@@ -72,7 +73,11 @@ python -m http.server 8080
 2. 双击项目根目录的 **`publish.cmd`**
 3. 等 1 分钟，刷新 <https://luobinjie687.github.io/>（强制刷新 `Ctrl+F5`）
 
-`publish.cmd` 会自动做三件事：先检查 JS 语法（有错就停下，不会把坏页面推上去）、提交、推送；推送失败会自动重试 8 次（因为这台机器访问 github.com 偶尔超时）。
+`publish.cmd` 会自动做四件事：先检查 JS 语法（有错就停下，不会把坏页面推上去）、提交、推送、确认结果。
+
+**关于这台机器的网络**：`github.com:443` 会间歇性连不上（表现为推送超时），而 `api.github.com` 一直稳定。所以脚本里准备了两条通道：先测 `github.com` 通不通，通则正常 `git push`，不通就自动改走 GitHub REST API 发布（内容一样，只是不经过 github.com）。你不需要管，脚本会自己选。
+
+推送失败时它还会自动重试；两条路都失败才报错，而且此时你的修改已经安全提交在本地，网络好了再双击一次就行。
 
 只想检查语法、不想发布：双击 `tools\check-site.ps1` 或运行 `powershell -ExecutionPolicy Bypass -File tools\check-site.ps1`。
 
