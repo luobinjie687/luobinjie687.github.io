@@ -1,5 +1,7 @@
 # 罗彬杰 · 个人主页
 
+**线上地址：<https://luobinjie687.github.io/>**（已上线，HTTPS，手机可访问）
+
 纯静态站点：没有构建步骤、没有依赖、不需要 Node。改完文件刷新浏览器就能看到效果。
 
 ## 文件结构
@@ -7,12 +9,16 @@
 ```
 my-homepage/
 ├─ index.html          页面骨架（一般不用改）
+├─ publish.cmd         ★ 双击这个发布上线
 ├─ data/
 │  └─ site.js          ★ 所有文字内容都在这里，改这个文件就行
 ├─ assets/
 │  ├─ style.css        样式与配色（改 :root 里的变量可换主色）
-│  └─ main.js          渲染逻辑（一般不用改）
-├─ assets/avatar.jpg   （可选）头像，放进来后在 site.js 里写 "assets/avatar.jpg"
+│  ├─ main.js          渲染逻辑（一般不用改）
+│  └─ avatar.jpg       （可选）头像，放进来后在 site.js 里写 "assets/avatar.jpg"
+├─ tools/
+│  ├─ check-site.ps1   语法自检（改完 site.js 可以先跑它）
+│  └─ publish.ps1      publish.cmd 实际调用的脚本
 └─ .nojekyll           给 GitHub Pages 用的空文件，别删
 ```
 
@@ -58,23 +64,36 @@ python -m http.server 8080
 
 也可以直接跟 AI 说"帮我把这篇论文加到主页上"，把引文粘过去就行。
 
-## 发布到公网（GitHub Pages）
+## 更新线上版本（两种方式，选一种）
 
-1. 在 GitHub 新建仓库，例如 `my-homepage`
-2. 本目录执行（仓库已初始化时）：
-   ```powershell
-   git add .
-   git commit -m "update homepage"
-   git push
-   ```
-3. 仓库 Settings → Pages → Source 选 `main` / root → 保存
-4. 等 1 分钟，访问 `https://<用户名>.github.io/my-homepage/`
+### 方式一：双击发布（改了本地文件之后）
 
-若仓库名就叫 `<用户名>.github.io`，则直接访问 `https://<用户名>.github.io/`。
+1. 编辑 `data\site.js`，保存
+2. 双击项目根目录的 **`publish.cmd`**
+3. 等 1 分钟，刷新 <https://luobinjie687.github.io/>（强制刷新 `Ctrl+F5`）
+
+`publish.cmd` 会自动做三件事：先检查 JS 语法（有错就停下，不会把坏页面推上去）、提交、推送；推送失败会自动重试 8 次（因为这台机器访问 github.com 偶尔超时）。
+
+只想检查语法、不想发布：双击 `tools\check-site.ps1` 或运行 `powershell -ExecutionPolicy Bypass -File tools\check-site.ps1`。
+
+### 方式二：在 GitHub 网页上直接改（不用电脑也行）
+
+手机或任何浏览器打开 <https://github.com/luobinjie687/luobinjie687.github.io>，进入 `data/site.js`，点右上角铅笔图标编辑，改完点 **Commit changes**，约 1 分钟后网站自动更新。
+
+## 站点信息
+
+| 项目 | 值 |
+| --- | --- |
+| 仓库 | <https://github.com/luobinjie687/luobinjie687.github.io>（公开） |
+| 托管 | GitHub Pages，`main` 分支根目录，自动构建 |
+| 费用 | 0 元（公开仓库的 Pages 免费，无限期） |
+| 部署方式 | 推送到 `main` → Pages 自动重建（约 20 秒～1 分钟） |
+
+仓库名必须保持 `luobinjie687.github.io`，改成别的名字网址会变成 `/<仓库名>/`，主页里的相对链接仍能用，但地址变长。
 
 ## 想自定义域名
 
-仓库 Settings → Pages → Custom domain，填域名并在域名商处加 CNAME 记录，勾选 Enforce HTTPS。
+仓库 Settings → Pages → Custom domain，填域名并在域名商处加 CNAME 记录，勾选 Enforce HTTPS。域名约 ¥60–100/年，证书免费。不是必须做的。
 
 ## 常见替换点
 
